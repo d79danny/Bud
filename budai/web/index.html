@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <meta name="theme-color" content="#151515">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/budai-192.png">
+  <link rel="stylesheet" href="/style.css">
+  <script type="module" src="/app.js"></script>
+  <title>BudAI</title>
+</head>
+<body>
+  <main id="signin" hidden>
+    <form id="login" class="login">
+      <h1>BudAI</h1>
+      <label>Username<input name="name" autocomplete="username" required maxlength="64"></label>
+      <label>Password<input name="password" type="password" autocomplete="current-password" required maxlength="256"></label>
+      <label>Verification code <small>when enabled</small><input name="otp" inputmode="numeric" autocomplete="one-time-code" maxlength="6"></label>
+      <button class="primary">Sign in</button>
+      <p id="login-error" class="alert" role="alert" hidden></p>
+    </form>
+    <form id="pair" class="login" hidden>
+      <h1>Pair with BudAI</h1>
+      <label>Device name<input name="label" value="Mobile" maxlength="80" required></label>
+      <button class="primary">Pair device</button>
+      <button type="button" id="cancel-pair">Use sign-in instead</button>
+      <p id="pair-error" class="alert" role="alert" hidden></p>
+    </form>
+  </main>
+  <main id="application" hidden>
+    <aside id="sidebar">
+      <div class="brand"><span class="brand-icon" aria-hidden="true">B</span><strong>BudAI</strong></div>
+      <nav id="nav" aria-label="Main navigation"></nav>
+      <section id="thread-controls" aria-label="Conversations"></section>
+      <div class="sidebar-footer">
+        <span id="connection" role="status">Checking host</span>
+        <button id="logout" type="button">Sign out</button>
+      </div>
+    </aside>
+    <div id="sidebar-resize" role="separator" aria-label="Sidebar width" aria-orientation="vertical" tabindex="0"></div>
+    <section id="workspace">
+      <header id="topbar">
+        <button id="toggle-sidebar" type="button" aria-label="Toggle navigation" aria-expanded="true">☰</button>
+        <h1 id="page-title">Chat</h1>
+        <span id="active" aria-live="polite"></span>
+        <button id="stop-all" class="danger" type="button" title="Stop Bud runs, desktop observation, speech, terminal, browser and generation. Pause queued tasks.">Emergency stop</button>
+      </header>
+      <p id="notice" role="status" hidden></p>
+      <div id="page"></div>
+    </section>
+  </main>
+  <dialog id="dialog"><form method="dialog" id="dialog-form"></form></dialog>
+</body>
+</html>

@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=BudAI
+Comment=Open the local Bud assistant
+Exec="@BUD_DIRECTORY@/scripts/budai" desktop
+Icon=@BUD_DIRECTORY@/budai/web/budai-192.png
+Terminal=false
+Categories=Utility;

@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "budai-local"
+version = "0.1.0"
+description = "Local Ubuntu assistant with Ollama and supervised Linux tools"
+readme = "README.md"
+requires-python = ">=3.11"
+dynamic = ["dependencies", "optional-dependencies"]
+
+[project.scripts]
+budai = "budai.__main__:main"
+
+[tool.setuptools]
+packages = ["budai"]
+
+[tool.setuptools.package-data]
+budai = ["web/*"]
+
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements.txt"]}
+optional-dependencies.browser = {file = ["requirements-browser.txt"]}
+optional-dependencies.desktop = {file = ["requirements-desktop.txt"]}
+optional-dependencies.voice = {file = ["requirements-voice.txt"]}

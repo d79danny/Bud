@@ -1,0 +1,15 @@
+[Unit]
+Description=BudAI local API
+After=graphical-session-pre.target
+
+[Service]
+Type=simple
+WorkingDirectory=@BUD_DIRECTORY@
+ExecStart="@BUD_DIRECTORY@/scripts/budai" serve
+EnvironmentFile=-%E/budai/environment
+Restart=on-failure
+RestartSec=3
+UMask=0077
+
+[Install]
+WantedBy=default.target

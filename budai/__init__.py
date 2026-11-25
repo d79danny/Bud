@@ -1,0 +1,1 @@
+"""BudAI local assistant."""
