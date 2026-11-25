@@ -320,7 +320,7 @@ export function installChat(state) {
     const sendButton = element("button", {class: "primary"}, "Send");
     const stopButton = button("Stop", stop, {disabled: true});
     const grants = {
-      files: textArea("files", {placeholder: "/home/you/Documents\nOne path per line", "aria-label": "Files accessible to Bud"}),
+      files: textArea("files", {placeholder: "~/Documents", "aria-label": "Files accessible to Bud"}),
       desktop: input("desktop", {type: "checkbox"}),
       terminal: input("terminal", {type: "checkbox"}),
       browser: input("browser", {type: "checkbox"}),
@@ -328,7 +328,7 @@ export function installChat(state) {
     };
     const form = element("form", {class: "chat-compose"}, text, attachments,
       element("details", {}, element("summary", {}, "Tool access for this message"),
-        field("Allowed file paths", grants.files),
+        field("Allowed file paths (one per line)", grants.files),
         row(...["desktop", "terminal", "browser", "media"].map(key => element("label", {class: "inline"}, grants[key], key)))),
       row(upload, element("span", {class: "spacer"}), stopButton, sendButton));
     upload.addEventListener("change", guarded(async () => {

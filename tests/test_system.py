@@ -37,6 +37,8 @@ class SystemTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(item["output"], "received typed text")
 
     async def test_ollama_adapter_uses_the_exact_model_and_measured_metrics(self):
+        from budai.tools import TOOLS
+
         requests = []
 
         class Handler(BaseHTTPRequestHandler):
@@ -73,12 +75,23 @@ class SystemTests(unittest.IsolatedAsyncioTestCase):
                 chunks = [chunk async for chunk in ollama.stream(messages, [], Preferences())]
                 self.assertTrue(chunks[0]["done"])
                 self.assertEqual(ollama.metrics["tokens_per_second"], 5)
+                selected_path = {"role": "system", "content": 'The selected file paths are ["/tmp/documents"].'}
+                tool = TOOLS["improvement_propose"].declaration("improvement_propose")
+                stream = ollama.stream([selected_path, *messages], [tool], Preferences(), structured=True)
+                self.assertTrue([chunk async for chunk in stream][0]["done"])
             finally:
                 server.shutdown()
                 thread.join()
         self.assertEqual(MODEL, "hf.co/OBLITERATUS/Qwen3.8-27B-OBLITERATED:Q3_K_M")
-        self.assertEqual(requests[-1][1]["model"], MODEL)
-        self.assertTrue(requests[-1][1]["stream"])
+        payload = requests[-1][1]
+        self.assertEqual(payload["model"], MODEL)
+        self.assertTrue(payload["stream"])
+        self.assertIn("/tmp/documents", payload["messages"][0]["content"])
+        self.assertIn("Respond with exactly one JSON object", payload["messages"][0]["content"])
+        self.assertEqual(payload["messages"][1]["role"], "user")
+        action = payload["format"]["properties"]["actions"]["items"]["anyOf"][0]
+        drafts = action["properties"]["arguments"]["properties"]["proposal"]["anyOf"]
+        self.assertTrue(any(draft["required"] == ["source"] for draft in drafts))
 
     def test_file_changes_zip_and_duplicate_search(self):
         with tempfile.TemporaryDirectory() as directory:

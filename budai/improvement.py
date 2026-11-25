@@ -1,10 +1,7 @@
 import json
 import re
 
-from .tools import TOOLS
-
-
-READ_ONLY = {"system_hardware", "file_list", "file_read", "file_search"}
+from .tools import READ_ONLY_TOOLS, TOOLS
 
 
 class Improvements:
@@ -26,7 +23,7 @@ class Improvements:
             self.steps(proposal)
         elif kind == "python":
             source = proposal.get("source", "")
-            if not isinstance(source, str) or not source or len(source) > 40000:
+            if not isinstance(source, str) or not source.strip() or len(source) > 40000:
                 raise ValueError("Provide Python source (up to 40,000 characters)")
         else:
             raise ValueError("Unknown improvement type")
@@ -45,7 +42,7 @@ class Improvements:
         if not isinstance(steps, list) or not 1 <= len(steps) <= 8:
             raise ValueError("A workflow requires one to eight steps")
         for step in steps:
-            if set(step) != {"tool", "arguments", "expect"} or step["tool"] not in READ_ONLY:
+            if set(step) != {"tool", "arguments", "expect"} or step["tool"] not in READ_ONLY_TOOLS:
                 raise ValueError("A workflow can use only supported read-only tools and must specify expected results")
             TOOLS[step["tool"]].schema.model_validate(step["arguments"])
             if not isinstance(step["expect"], dict) or not step["expect"]:
@@ -69,7 +66,7 @@ class Improvements:
         evidence = []
         for step in self.steps(proposal):
             name = step["tool"]
-            data = executor.prepare(run, name, step["arguments"], executor.available(run, READ_ONLY))
+            data = executor.prepare(run, name, step["arguments"], executor.available(run, READ_ONLY_TOOLS))
             result = await executor.perform(run, name, data)
             self.assert_result(result, step["expect"])
             evidence.append({"tool": name, "verified": step["expect"]})

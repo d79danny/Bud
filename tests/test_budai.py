@@ -321,6 +321,81 @@ class APITests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(current.json()["state"], "active")
         self.assertEqual((await self.client.get("/api/improvements")).json()[0]["state"], "rejected")
 
+    async def test_python_proposals_require_actual_source(self):
+        from budai.tools import TOOLS
+
+        schema = TOOLS["improvement_propose"].declaration("improvement_propose")["function"]["parameters"]
+        python = next(option for option in schema["properties"]["proposal"]["anyOf"]
+                      if "source" in option["properties"])
+        self.assertEqual(python["required"], ["source"])
+
+        await self.login()
+        draft = {"name": "Example", "kind": "python", "proposal": {}}
+        missing = await self.client.post("/api/improvements", json=draft)
+        self.assertEqual(missing.status_code, 422)
+        blank = await self.client.post("/api/improvements", json={**draft, "proposal": {"source": " \n"}})
+        self.assertEqual(blank.status_code, 422)
+        source = "print('draft for review')"
+        saved = await self.client.post("/api/improvements", json={**draft, "proposal": {"source": source}})
+        self.assertEqual(saved.status_code, 201, saved.text)
+        row = self.s.improvements.entry(1, saved.json()["id"])
+        self.assertEqual(row["proposal"]["source"], source)
+        self.assertEqual(row["state"], "proposed")
+
+    async def test_repeated_proposal_error_and_recovery_to_selected_file_path(self):
+        folder = self.root / "selected"
+        folder.mkdir()
+        note = folder / "notes.txt"
+        note.write_text("actual file inside the selected path")
+        requests = [
+            ("improvement_propose", {"name": "First draft", "kind": "python", "proposal": {}}),
+            ("improvement_propose", {"name": "Second draft", "kind": "python", "proposal": {}}),
+            ("file_search", {"path": "/home/user", "query": "notes"}),
+            ("file_search", {"path": str(folder), "query": "notes"}),
+        ]
+        catalogs, contexts = [], []
+
+        class ScriptedProtocol:
+            metrics = {}
+
+            async def details(self):
+                return {"capabilities": ["tools"]}
+
+            async def stream(self, context, tools, preferences, **options):
+                index = len(catalogs)
+                catalogs.append({tool["function"]["name"] for tool in tools})
+                contexts.append(context[0]["content"])
+                if index < len(requests):
+                    name, arguments = requests[index]
+                    yield {"message": {"tool_calls": [{"function": {"name": name, "arguments": arguments}}]},
+                           "done": True}
+                else:
+                    yield {"message": {"content": "The search found notes.txt."}, "done": True}
+
+        self.s.ollama = ScriptedProtocol()
+        await self.login()
+        conversation = await self.thread()
+        response = await self.client.post(f"/api/conversations/{conversation}/chat", json={
+            "text": "Find notes.txt in the selected directory.",
+            "grants": {"files": [str(folder)]},
+        })
+        self.assertEqual(response.status_code, 200, response.text)
+        events = [json.loads(line) for line in response.text.splitlines()]
+        tools = [event for event in events if event["event"] == "tool"]
+        self.assertEqual([event["status"] for event in tools], ["error", "error", "error", "success"])
+        self.assertIn("source", tools[0]["error"])
+        self.assertIn("repeated", tools[1]["error"])
+        self.assertIn(str(folder), contexts[0])
+        self.assertIn(str(folder), tools[2]["error"])
+        self.assertEqual([item["path"] for item in tools[3]["result"]["results"]], [str(note)])
+        self.assertIn("improvement_propose", catalogs[1])
+        self.assertNotIn("improvement_propose", catalogs[2])
+        self.assertIn("file_search", catalogs[3])
+        self.assertEqual(events[-1]["event"], "done")
+        logged = (await self.client.get("/api/errors")).json()
+        self.assertCountEqual([entry["component"] for entry in logged], ["improvement_propose", "file_search"])
+        self.assertEqual(self.s.improvements.rows(1), [])
+
     async def test_actual_ollama_connection_failure_is_logged_without_bud_reply(self):
         from budai.ollama import Ollama
 

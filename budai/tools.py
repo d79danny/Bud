@@ -2,9 +2,9 @@ import asyncio
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Literal, get_args
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
 
 from . import files
 from .process import command
@@ -139,10 +139,43 @@ class Learned(Parameters):
     id: int = Field(gt=0)
 
 
+ReadOnlyTool = Literal["system_hardware", "file_list", "file_read", "file_search"]
+READ_ONLY_TOOLS = frozenset(get_args(ReadOnlyTool))
+
+
+class WorkflowStep(Parameters):
+    tool: ReadOnlyTool
+    arguments: dict
+    expect: dict = Field(min_length=1)
+
+
+class WorkflowDraft(Parameters):
+    steps: list[WorkflowStep] = Field(min_length=1, max_length=8)
+
+
+class PythonDraft(Parameters):
+    source: str = Field(min_length=1, max_length=40000, description="Python source code to save for review")
+
+    @field_validator("source")
+    @classmethod
+    def require_source(cls, source):
+        if not source.strip():
+            raise ValueError("Provide actual Python source code")
+        return source
+
+
 class Proposal(Parameters):
     name: str = Field(min_length=1, max_length=120)
     kind: Literal["workflow", "python"]
-    proposal: dict
+    proposal: PythonDraft | WorkflowDraft
+
+    @model_validator(mode="after")
+    def match_kind(self):
+        if self.kind == "python" and not isinstance(self.proposal, PythonDraft):
+            raise ValueError("A Python proposal requires proposal.source")
+        if self.kind == "workflow" and not isinstance(self.proposal, WorkflowDraft):
+            raise ValueError("A workflow proposal requires proposal.steps")
+        return self
 
 
 class Grants(Parameters):
@@ -213,7 +246,10 @@ TOOLS = {
     "remember": Tool(Remember, "Record user-provided information with a source and confidence level", approval=True),
     "agent_delegate": Tool(Delegate, "Ask a specialized internal agent to investigate a bounded subtask", "agents"),
     "task_complete": Tool(Finish, "Record the scheduled task outcome with successful tool action IDs as evidence", "task"),
-    "improvement_propose": Tool(Proposal, "Propose a versioned read-only workflow or Python source for user review"),
+    "improvement_propose": Tool(
+        Proposal, "Save a concrete improvement for review. A Python proposal needs actual code in "
+        "proposal.source. A workflow proposal needs read-only actions and expectations in proposal.steps."
+    ),
     "workflow_run": Tool(Learned, "Execute a previously validated and enabled read-only reusable workflow"),
 }
 
@@ -263,12 +299,23 @@ class Executor:
             raise PermissionError(f"{name} is unavailable to this request")
         if isinstance(arguments, str):
             arguments = json.loads(arguments)
-        data = TOOLS[name].schema.model_validate(arguments).model_dump()
+        try:
+            data = TOOLS[name].schema.model_validate(arguments).model_dump()
+        except ValidationError as error:
+            fields = []
+            for issue in error.errors(include_url=False, include_context=False, include_input=False):
+                location = ".".join(map(str, issue["loc"])) or "arguments"
+                fields.append(f"{location} ({issue['msg']})")
+            raise ValueError("Invalid tool arguments. " + ", ".join(fields)) from None
         for key in ("path", "destination", "cwd"):
             if data.get(key):
                 data[key] = str(self.permitted_path(data[key], run))
         if name in {"file_list", "file_read", "file_search"} and not self.granted_path(data["path"], run):
-            raise PermissionError(f"{data['path']} is outside the file paths selected for this request")
+            roots = json.dumps(run.grants.files, ensure_ascii=False)
+            raise PermissionError(
+                f"{data['path']} is outside the file paths selected for this request. "
+                f"Choose a path under the selected paths {roots}, or ask the user to select the intended directory."
+            )
         if name == "file_change" and self.services.config.data.is_relative_to(Path(data["path"])):
             raise PermissionError("This operation would also affect BudAI's private data")
         if name == "desktop_capture" and data["scope"] == "region" and not data["region"]:
